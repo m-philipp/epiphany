@@ -217,7 +217,6 @@ class EpiRoute
 
         if ($httpMethod === null)
             $httpMethod = $_SERVER['REQUEST_METHOD'];
-
         foreach ($this->regexes as $ind => $regex) {
             if (preg_match($regex, $this->route, $arguments)) {
                 array_shift($arguments);
@@ -292,7 +291,7 @@ class EpiRoute
     private function addRoute($route, $callback, $method, $postprocess = false)
     {
         $this->routes[] = array('httpMethod' => $method, 'path' => $route, 'callback' => $callback, 'postprocess' => $postprocess);
-        $this->regexes[] = "#^{$route}\$#";
+        $this->regexes[] = "#^{$route}[(/)]?\$#";
         if (Epi::getSetting('debug'))
             getDebug()->addMessage(__CLASS__, sprintf('Found %s : %s : %s', $method, $route, json_encode($callback)));
     }
