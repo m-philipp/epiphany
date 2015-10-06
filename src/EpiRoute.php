@@ -169,8 +169,6 @@ class EpiRoute
      */
     public function run($route = false, $httpMethod = null)
     {
-
-
         if ($route === false)
             $route = isset($_GET[self::routeKey]) ? $_GET[self::routeKey] : '/';
 
@@ -178,10 +176,9 @@ class EpiRoute
             $httpMethod = $_SERVER['REQUEST_METHOD'];
         $routeDef = $this->getRoute($route, $httpMethod);
 
-        $response = call_user_func_array($routeDef['callback'], $routeDef['args']);
-
-
         $this->preprocessing($routeDef['postprocess']);
+
+        $response = call_user_func_array($routeDef['callback'], $routeDef['args']);
 
         if (!$routeDef['postprocess'])
             return $response;
