@@ -155,7 +155,7 @@ class EpiRoute
     private function preprocessing($isApi = false)
     {
         if (!empty($this->preproc))
-            call_user_func($this->preproc, array($isApi));
+            call_user_func($this->preproc, $isApi);
     }
 
     /**
@@ -176,7 +176,7 @@ class EpiRoute
             $httpMethod = $_SERVER['REQUEST_METHOD'];
         $routeDef = $this->getRoute($route, $httpMethod);
 
-        $this->preprocessing($routeDef['postprocess']);
+        $this->preprocessing(!$routeDef['postprocess'] ? false : true);
 
         $response = call_user_func_array($routeDef['callback'], $routeDef['args']);
 
