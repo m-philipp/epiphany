@@ -20,6 +20,7 @@ class EpiRoute
     private $routes = array();
     private $regexes = array();
     private $route = null;
+    private $httpMethod = null;
     private $preproc = null;
     const routeKey = '__route__';
     const httpGet = 'GET';
@@ -152,10 +153,40 @@ class EpiRoute
         }
     }
 
-    private function preprocessing($isApi = false)
+    private function preprocessing($route = null, $httpMethod = null)
     {
-        if (!empty($this->preproc))
-            call_user_func($this->preproc, $isApi);
+        if (empty($this->preproc))
+            return;
+
+        call_user_func($this->preproc, $this->route, $this->httpMethod, $this->isApiCall());
+    }
+
+    public function isApiCall()
+    {
+
+        foreach ($this->regexes as $ind => $regex) {
+            if (preg_match($regex, $this->route, $arguments)) {
+                array_shift($arguments);
+                $def = $this->routes[$ind];
+
+                if (Epi::getSetting('debug'))
+                    getDebug()->addMessage(__CLASS__, sprintf('Matched %s : %s : %s : %s', $this->httpMethod, $this->route, json_encode($def['callback']), json_encode($arguments)));
+
+                return $def['postprocess'];
+            }
+        }
+        EpiException::raise(new EpiException("Could not find route {$this->route} from {$_SERVER['REQUEST_URI']}"));
+
+    }
+
+    private function setRouteVar($route = false, $httpMethod = null)
+    {
+        if ($route === false)
+            $this->route = isset($_GET[self::routeKey]) ? $_GET[self::routeKey] : '/';
+
+        if ($httpMethod === null)
+            $this->httpMethod = $_SERVER['REQUEST_METHOD'];
+
     }
 
     /**
@@ -169,14 +200,12 @@ class EpiRoute
      */
     public function run($route = false, $httpMethod = null)
     {
-        if ($route === false)
-            $route = isset($_GET[self::routeKey]) ? $_GET[self::routeKey] : '/';
+        $this->setRouteVar($route, $httpMethod);
 
-        if ($httpMethod === null)
-            $httpMethod = $_SERVER['REQUEST_METHOD'];
-        $routeDef = $this->getRoute($route, $httpMethod);
+        $this->preprocessing();
 
-        $this->preprocessing(!$routeDef['postprocess'] ? false : true);
+        $routeDef = $this->getRoute();
+
 
         $response = call_user_func_array($routeDef['callback'], $routeDef['args']);
 
@@ -208,28 +237,22 @@ class EpiRoute
      * @method getRoute
      * @static method
      */
-    public function getRoute($route = false, $httpMethod = null)
+    private function getRoute()
     {
-        if ($route)
-            $this->route = $route;
-        else
-            $this->route = isset($_GET[self::routeKey]) ? $_GET[self::routeKey] : '/';
 
-        if ($httpMethod === null)
-            $httpMethod = $_SERVER['REQUEST_METHOD'];
         foreach ($this->regexes as $ind => $regex) {
             if (preg_match($regex, $this->route, $arguments)) {
                 array_shift($arguments);
                 $def = $this->routes[$ind];
-                if ($httpMethod != $def['httpMethod']) {
+                if ($this->httpMethod != $def['httpMethod']) {
                     continue;
                 } else if (is_array($def['callback']) && method_exists($def['callback'][0], $def['callback'][1])) {
                     if (Epi::getSetting('debug'))
-                        getDebug()->addMessage(__CLASS__, sprintf('Matched %s : %s : %s : %s', $httpMethod, $this->route, json_encode($def['callback']), json_encode($arguments)));
+                        getDebug()->addMessage(__CLASS__, sprintf('Matched %s : %s : %s : %s', $this->httpMethod, $this->route, json_encode($def['callback']), json_encode($arguments)));
                     return array('callback' => $def['callback'], 'args' => $arguments, 'postprocess' => $def['postprocess']);
                 } else if (function_exists($def['callback'])) {
                     if (Epi::getSetting('debug'))
-                        getDebug()->addMessage(__CLASS__, sprintf('Matched %s : %s : %s : %s', $httpMethod, $this->route, json_encode($def['callback']), json_encode($arguments)));
+                        getDebug()->addMessage(__CLASS__, sprintf('Matched %s : %s : %s : %s', $this->httpMethod, $this->route, json_encode($def['callback']), json_encode($arguments)));
                     return array('callback' => $def['callback'], 'args' => $arguments, 'postprocess' => $def['postprocess']);
                 }
 
