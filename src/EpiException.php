@@ -1,22 +1,30 @@
 <?php
+
 /**
  * @author Jaisen Mathai <jaisen@jmathai.com>
  * @uses Exception
  */
 class EpiException extends Exception
 {
-	public static function raise($exception)
-	{
-		$useExceptions = Epi::getSetting('exceptions');
-		if ($useExceptions) {
-			throw new $exception($exception->getMessage(), $exception->getCode());
-		} else {
-			echo sprintf("An error occurred and you have <strong>exceptions</strong> disabled so we're displaying the information.
+    public static function raise($exception)
+    {
+        $useExceptions = Epi::getSetting('exceptions');
+        if ($useExceptions) {
+            throw new $exception($exception->getMessage(), $exception->getCode());
+        } else {
+            header($_SERVER["SERVER_PROTOCOL"] . " 500 Internal Server Error");
+
+            echo sprintf("An error occurred and you have <strong>exceptions</strong> disabled so we're displaying the information.
                     To turn exceptions on you should call: <em>Epi::setSetting('exceptions', true);</em>.
                     <ul><li>File: %s</li><li>Line: %s</li><li>Message: %s</li><li>Stack trace: %s</li></ul>",
-				$exception->getFile(), $exception->getLine(), $exception->getMessage(), nl2br($exception->getTraceAsString()));
-		}
-	}
+                $exception->getFile(), $exception->getLine(), $exception->getMessage(), nl2br($exception->getTraceAsString()));
+        }
+
+        $exceptionLogging = Epi::getSetting('exceptionsLogging');
+        if ($exceptionLogging) {
+            getLogger()->crit($exception);
+        }
+    }
 }
 
 class EpiCacheException extends EpiException
@@ -48,5 +56,9 @@ class EpiDatabaseQueryException extends EpiDatabaseException
 }
 
 class EpiSessionException extends EpiException
+{
+}
+
+class EpiRouteException extends EpiException
 {
 }

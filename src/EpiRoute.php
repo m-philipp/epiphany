@@ -22,6 +22,7 @@ class EpiRoute
     private $route = null;
     private $httpMethod = null;
     private $preproc = null;
+    private $notFound = null;
     const routeKey = '__route__';
     const httpGet = 'GET';
     const httpPost = 'POST';
@@ -144,21 +145,17 @@ class EpiRoute
      * @method set_preprocessing
      * @static method
      */
-    public function set_preprocessing($function, $class = null)
+    public function setPreprocessor($callback)
     {
-        if (!empty($class) && method_exists($class, $function)) {
-            $this->preproc = $class . "::" . $function;
-        } else if (function_exists($function)) {
-            $this->preproc = $function;
-        }
+        $this->preproc = $callback;
     }
 
-    private function preprocessing($route = null, $httpMethod = null)
+    private function preprocess()
     {
-        if (empty($this->preproc))
-            return;
+        if ($this->callbackExists($this->preproc)) {
+            call_user_func($this->preproc, $this->route, $this->httpMethod, $this->isApiCall());
 
-        call_user_func($this->preproc, $this->route, $this->httpMethod, $this->isApiCall());
+        }
     }
 
     public function isApiCall()
@@ -175,7 +172,24 @@ class EpiRoute
                 return $def['postprocess'];
             }
         }
-        EpiException::raise(new EpiException("Could not find route {$this->route} from {$_SERVER['REQUEST_URI']}"));
+        return false;
+
+    }
+
+    public function setNotFound($callback)
+    {
+        $this->notFound = $callback;
+    }
+
+    private function notFound()
+    {
+        header($_SERVER["SERVER_PROTOCOL"] . " 404 Not Found");
+        if ($this->callbackExists($this->notFound)) {
+            call_user_func($this->notFound);
+
+            getLogger()->warn("Called notFound() because a Route for {$this->route} wasn't found.");
+            exit;
+        }
 
     }
 
@@ -202,7 +216,7 @@ class EpiRoute
     {
         $this->setRouteVar($route, $httpMethod);
 
-        $this->preprocessing();
+        $this->preprocess();
 
         $routeDef = $this->getRoute();
 
@@ -214,7 +228,7 @@ class EpiRoute
         else {
             // Only echo the response if it's not null.
             if (!is_null($response)) {
-                $response = json_encode($response);
+                $response = json_encode($response, JSON_NUMERIC_CHECK);
                 if (isset($_GET['callback']))
                     $response = "{$_GET['callback']}($response)";
                 else
@@ -246,11 +260,7 @@ class EpiRoute
                 $def = $this->routes[$ind];
                 if ($this->httpMethod != $def['httpMethod']) {
                     continue;
-                } else if (is_array($def['callback']) && method_exists($def['callback'][0], $def['callback'][1])) {
-                    if (Epi::getSetting('debug'))
-                        getDebug()->addMessage(__CLASS__, sprintf('Matched %s : %s : %s : %s', $this->httpMethod, $this->route, json_encode($def['callback']), json_encode($arguments)));
-                    return array('callback' => $def['callback'], 'args' => $arguments, 'postprocess' => $def['postprocess']);
-                } else if (function_exists($def['callback'])) {
+                } else if ($this->callbackExists($def['callback'])) {
                     if (Epi::getSetting('debug'))
                         getDebug()->addMessage(__CLASS__, sprintf('Matched %s : %s : %s : %s', $this->httpMethod, $this->route, json_encode($def['callback']), json_encode($arguments)));
                     return array('callback' => $def['callback'], 'args' => $arguments, 'postprocess' => $def['postprocess']);
@@ -259,7 +269,10 @@ class EpiRoute
                 EpiException::raise(new EpiException('Could not call ' . json_encode($def) . " for route {$regex}"));
             }
         }
-        EpiException::raise(new EpiException("Could not find route {$this->route} from {$_SERVER['REQUEST_URI']}"));
+
+
+        $this->notFound();
+        EpiException::raise(new EpiRouteException("Could not find route {$this->route} from {$_SERVER['REQUEST_URI']}"));
     }
 
     /**
@@ -317,6 +330,17 @@ class EpiRoute
         $this->regexes[] = "#^{$route}[(/)]?\$#";
         if (Epi::getSetting('debug'))
             getDebug()->addMessage(__CLASS__, sprintf('Found %s : %s : %s', $method, $route, json_encode($callback)));
+    }
+
+    private function callbackExists($callable)
+    {
+        if (is_array($callable) && method_exists($callable[0], $callable[1])) {
+            return true;
+        } else if (is_string($callable) && function_exists($callable)) {
+            return true;
+        }
+
+        return false;
     }
 }
 
